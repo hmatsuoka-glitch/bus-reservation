@@ -1,36 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
 
-// Node.js undici validates string bodies as ByteStrings, rejecting non-Latin-1 chars.
-// Workaround: intercept fetch calls and convert string bodies to Buffer (UTF-8) before sending.
-const utf8SafeFetch: typeof globalThis.fetch = async (input, init) => {
-  if (init && typeof init.body === "string") {
-    (init as RequestInit).body = Buffer.from(init.body, "utf8");
-  }
-  return globalThis.fetch(input as RequestInfo, init);
-};
+const PARSE_PROMPT = `This image or PDF is a highway bus reservation confirmation. Extract all of the following information and return it as JSON.
+If information is not found, use null.
 
-const client = new Anthropic({ fetch: utf8SafeFetch });
-
-const PARSE_PROMPT = `この画像またはPDFは高速バスの予約確認書です。以下の情報をすべて抽出して、JSON形式で返してください。
-情報が見つからない場合はnullにしてください。
-
-返すJSONの形式：
+Return JSON format:
 {
-  "busCompany": "バス会社名",
-  "bookingNumber": "予約番号",
-  "passengerName": "乗客名（様などの敬称は除く）",
-  "departureDate": "出発日（YYYY-MM-DD形式）",
-  "departureTime": "出発時刻（HH:MM形式）",
-  "arrivalTime": "到着時刻（HH:MM形式）",
-  "departureStop": "出発バス停・乗り場名",
-  "arrivalStop": "到着バス停・目的地名",
-  "seatNumber": "座席番号"
+  "busCompany": "bus company name",
+  "bookingNumber": "booking/reservation number",
+  "passengerName": "passenger name (exclude honorifics)",
+  "departureDate": "departure date (YYYY-MM-DD format)",
+  "departureTime": "departure time (HH:MM format)",
+  "arrivalTime": "arrival time (HH:MM format)",
+  "departureStop": "departure bus stop / boarding location name",
+  "arrivalStop": "arrival bus stop / destination name",
+  "seatNumber": "seat number"
 }
 
-JSONのみを返し、余分なテキストや説明は不要です。`;
+Return only the JSON object, no extra text or explanation.`;
 
 type SupportedImageType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 const SUPPORTED_IMAGE_TYPES: SupportedImageType[] = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -48,14 +36,19 @@ interface ParsedReservation {
   seatNumber?: string | null;
 }
 
+interface AnthropicResponse {
+  content: Array<{ type: string; text?: string }>;
+  error?: { message?: string };
+}
+
 async function parseOne(base64: string, mimeType: string): Promise<ParsedReservation> {
   if (!SUPPORTED_TYPES.includes(mimeType)) {
     throw new Error(`対応していないファイル形式: ${mimeType}`);
   }
 
-  const messageContent: Anthropic.MessageParam["content"] = mimeType === "application/pdf"
+  const content = mimeType === "application/pdf"
     ? [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } } as Anthropic.DocumentBlockParam,
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
         { type: "text", text: PARSE_PROMPT },
       ]
     : [
@@ -63,16 +56,36 @@ async function parseOne(base64: string, mimeType: string): Promise<ParsedReserva
         { type: "text", text: PARSE_PROMPT },
       ];
 
-  const response = await client.messages.create({
+  const bodyObj = {
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    messages: [{ role: "user", content: messageContent }],
+    messages: [{ role: "user", content }],
+  };
+
+  // Use Buffer (Uint8Array) as body to bypass Node.js undici's ByteString validation
+  // which rejects string bodies containing non-Latin-1 characters.
+  const bodyBuffer = Buffer.from(JSON.stringify(bodyObj), "utf-8");
+
+  const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: bodyBuffer,
   });
 
-  const textContent = response.content.find((c) => c.type === "text");
-  if (!textContent || textContent.type !== "text") throw new Error("AIからのレスポンスが空でした");
+  const data = await apiRes.json() as AnthropicResponse;
 
-  const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
+  if (!apiRes.ok) {
+    throw new Error(data?.error?.message ?? `Anthropic API error: ${apiRes.status}`);
+  }
+
+  const textBlock = data.content?.find((c) => c.type === "text");
+  if (!textBlock?.text) throw new Error("AIからのレスポンスが空でした");
+
+  const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("予約情報を抽出できませんでした");
 
   return JSON.parse(jsonMatch[0]) as ParsedReservation;
@@ -105,7 +118,7 @@ export async function POST(req: NextRequest) {
     for (const { mimeType } of files) {
       if (!SUPPORTED_TYPES.includes(mimeType)) {
         return NextResponse.json(
-          { error: `対応していないファイル形式です。JPG・PNG・GIF・WebP・PDFを使用してください。` },
+          { error: "対応していないファイル形式です。JPG・PNG・GIF・WebP・PDFを使用してください。" },
           { status: 400 }
         );
       }
