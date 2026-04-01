@@ -3,7 +3,16 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
 
-const client = new Anthropic();
+// Node.js undici validates string bodies as ByteStrings, rejecting non-Latin-1 chars.
+// Workaround: intercept fetch calls and convert string bodies to Buffer (UTF-8) before sending.
+const utf8SafeFetch: typeof globalThis.fetch = async (input, init) => {
+  if (init && typeof init.body === "string") {
+    (init as RequestInit).body = Buffer.from(init.body, "utf8");
+  }
+  return globalThis.fetch(input as RequestInfo, init);
+};
+
+const client = new Anthropic({ fetch: utf8SafeFetch });
 
 const PARSE_PROMPT = `この画像またはPDFは高速バスの予約確認書です。以下の情報をすべて抽出して、JSON形式で返してください。
 情報が見つからない場合はnullにしてください。
