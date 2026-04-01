@@ -15,8 +15,6 @@ const RP_ID =
     .split(":")[0] || "localhost";
 const ORIGIN = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
-const challengeStore = new Map<string, string>();
-
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -35,10 +33,10 @@ export async function GET() {
     rpID: RP_ID,
     userID: user.id,
     userName: user.email,
-    userDisplayName: user.name,
+    userDisplayName: user.nickname || user.email,
     attestationType: "none",
     excludeCredentials: user.passkeys.map((p) => ({
-      id: Buffer.from(p.credentialId, "base64") as unknown as BufferSource,
+      id: Buffer.from(p.credentialId, "base64url") as unknown as BufferSource,
       type: "public-key" as const,
       transports: (p.transports?.split(",").filter(Boolean) ||
         []) as AuthenticatorTransportFuture[],
@@ -49,7 +47,12 @@ export async function GET() {
     },
   });
 
-  challengeStore.set(session.user.id, options.challenge);
+  // Store challenge in DB (works across serverless instances)
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: { currentChallenge: options.challenge },
+  });
+
   return NextResponse.json(options);
 }
 
@@ -60,16 +63,20 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const expectedChallenge = challengeStore.get(session.user.id);
 
-  if (!expectedChallenge) {
-    return NextResponse.json({ error: "Challenge not found" }, { status: 400 });
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { currentChallenge: true },
+  });
+
+  if (!user?.currentChallenge) {
+    return NextResponse.json({ error: "Challenge not found. Please try again." }, { status: 400 });
   }
 
   try {
     const verification = await verifyRegistrationResponse({
       response: body,
-      expectedChallenge,
+      expectedChallenge: user.currentChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
       requireUserVerification: true,
@@ -85,8 +92,8 @@ export async function POST(req: NextRequest) {
     await prisma.passkey.create({
       data: {
         userId: session.user.id,
-        credentialId: Buffer.from(credentialID).toString("base64"),
-        publicKey: Buffer.from(credentialPublicKey).toString("base64"),
+        credentialId: Buffer.from(credentialID).toString("base64url"),
+        publicKey: Buffer.from(credentialPublicKey).toString("base64url"),
         counter,
         deviceType: credentialDeviceType,
         backedUp: credentialBackedUp,
@@ -94,10 +101,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    challengeStore.delete(session.user.id);
+    // Clear challenge
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: { currentChallenge: null },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error(error);
+    console.error("Passkey registration error:", error);
     return NextResponse.json({ error: "Registration failed" }, { status: 500 });
   }
 }

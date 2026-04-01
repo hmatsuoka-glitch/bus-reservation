@@ -7,15 +7,25 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  name         String        @default("")
-  nickname     String?
-  email        String        @unique
-  password     String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  reservations Reservation[]
-  passkeys     Passkey[]
+  id               String        @id @default(cuid())
+  name             String        @default("")
+  nickname         String?
+  email            String        @unique
+  password         String
+  currentChallenge String?
+  passkeyToken     String?       @unique
+  passkeyTokenExp  DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  reservations     Reservation[]
+  passkeys         Passkey[]
+}
+
+model AuthChallenge {
+  id        String   @id @default(cuid())
+  challenge String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }
 
 model Passkey {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { startRegistration } from "@simplewebauthn/browser";
 
 export default function SetupPasskeyPage() {
   const { data: session } = useSession();
@@ -29,58 +30,38 @@ export default function SetupPasskeyPage() {
     setLoading(true);
     setError("");
     try {
+      // Get registration options from server
       const optionsRes = await fetch("/api/passkey/register");
+      if (!optionsRes.ok) {
+        throw new Error("オプションの取得に失敗しました");
+      }
       const options = await optionsRes.json();
 
-      const challenge = Uint8Array.from(atob(options.challenge.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
-      const userId = Uint8Array.from(atob(options.user.id.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+      // Use SimpleWebAuthn browser library (handles all encoding correctly)
+      const registrationResponse = await startRegistration(options);
 
-      const credential = await navigator.credentials.create({
-        publicKey: {
-          ...options,
-          challenge,
-          user: { ...options.user, id: userId },
-          excludeCredentials: (options.excludeCredentials || []).map(
-            (c: { id: string; type: string }) => ({
-              ...c,
-              id: Uint8Array.from(atob(c.id.replace(/-/g, "+").replace(/_/g, "/")), (ch) => ch.charCodeAt(0)),
-            })
-          ),
-        },
-      }) as PublicKeyCredential | null;
-
-      if (!credential) throw new Error("キャンセルされました");
-
-      const attestationResponse = credential.response as AuthenticatorAttestationResponse;
-
+      // Verify with server
       const verifyRes = await fetch("/api/passkey/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: credential.id,
-          rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
-          type: credential.type,
-          response: {
-            attestationObject: btoa(
-              String.fromCharCode(...new Uint8Array(attestationResponse.attestationObject))
-            ),
-            clientDataJSON: btoa(
-              String.fromCharCode(...new Uint8Array(attestationResponse.clientDataJSON))
-            ),
-            transports: attestationResponse.getTransports?.() || [],
-          },
-        }),
+        body: JSON.stringify(registrationResponse),
       });
 
-      if (verifyRes.ok) {
-        setSuccess(true);
-      } else {
-        throw new Error("設定に失敗しました");
+      if (!verifyRes.ok) {
+        const data = await verifyRes.json();
+        throw new Error(data.error || "設定に失敗しました");
       }
+
+      setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "エラーが発生しました");
+      if (err instanceof Error && err.name === "NotAllowedError") {
+        setError("認証がキャンセルされました");
+      } else {
+        setError(err instanceof Error ? err.message : "エラーが発生しました");
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

@@ -5,6 +5,7 @@ import {
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import type { AuthenticatorTransportFuture } from "@simplewebauthn/types";
+import { randomUUID } from "crypto";
 
 const RP_ID =
   process.env.NEXTAUTH_URL?.replace("https://", "")
@@ -12,44 +13,50 @@ const RP_ID =
     .split(":")[0] || "localhost";
 const ORIGIN = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
-const challengeStore = new Map<string, string>();
-const CHALLENGE_KEY = "global_auth_challenge";
-
 export async function GET() {
-  const passkeys = await prisma.passkey.findMany({
-    include: { user: true },
-  });
-
-  if (passkeys.length === 0) {
-    return NextResponse.json({ challenge: "", allowCredentials: [] });
-  }
-
   const options = await generateAuthenticationOptions({
     rpID: RP_ID,
     userVerification: "required",
   });
 
-  challengeStore.set(CHALLENGE_KEY, options.challenge);
+  // Store challenge in DB with expiry (works across serverless instances)
+  const challengeRecord = await prisma.authChallenge.create({
+    data: {
+      id: randomUUID(),
+      challenge: options.challenge,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+    },
+  });
 
   return NextResponse.json({
-    challenge: options.challenge,
-    allowCredentials: passkeys.map((p) => ({
-      id: Buffer.from(p.credentialId).toString("base64"),
-      type: "public-key",
-    })),
+    ...options,
+    challengeId: challengeRecord.id,
   });
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const expectedChallenge = challengeStore.get(CHALLENGE_KEY);
+  const { challengeId, ...credential } = body;
 
-  if (!expectedChallenge) {
-    return NextResponse.json({ error: "Challenge not found" }, { status: 400 });
+  if (!challengeId) {
+    return NextResponse.json({ error: "Challenge ID missing" }, { status: 400 });
   }
 
+  // Look up challenge from DB
+  const challengeRecord = await prisma.authChallenge.findUnique({
+    where: { id: challengeId },
+  });
+
+  if (!challengeRecord || challengeRecord.expiresAt < new Date()) {
+    return NextResponse.json({ error: "Challenge expired or not found" }, { status: 400 });
+  }
+
+  // Delete used challenge
+  await prisma.authChallenge.delete({ where: { id: challengeId } });
+
+  // Find passkey by credential ID
   const passkey = await prisma.passkey.findUnique({
-    where: { credentialId: body.id },
+    where: { credentialId: credential.id },
     include: { user: true },
   });
 
@@ -63,16 +70,14 @@ export async function POST(req: NextRequest) {
     ) as AuthenticatorTransportFuture[];
 
     const verification = await verifyAuthenticationResponse({
-      response: body,
-      expectedChallenge,
+      response: credential,
+      expectedChallenge: challengeRecord.challenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
       requireUserVerification: true,
       authenticator: {
-        credentialID: new Uint8Array(Buffer.from(passkey.credentialId, "base64")),
-        credentialPublicKey: new Uint8Array(
-          Buffer.from(passkey.publicKey, "base64")
-        ),
+        credentialID: new Uint8Array(Buffer.from(passkey.credentialId, "base64url")),
+        credentialPublicKey: new Uint8Array(Buffer.from(passkey.publicKey, "base64url")),
         counter: passkey.counter,
         transports,
       },
@@ -87,14 +92,22 @@ export async function POST(req: NextRequest) {
       data: { counter: verification.authenticationInfo.newCounter },
     });
 
-    challengeStore.delete(CHALLENGE_KEY);
+    // Issue a short-lived login token
+    const token = randomUUID();
+    await prisma.user.update({
+      where: { id: passkey.userId },
+      data: {
+        passkeyToken: token,
+        passkeyTokenExp: new Date(Date.now() + 2 * 60 * 1000), // 2 minutes
+      },
+    });
 
     return NextResponse.json({
-      userId: passkey.userId,
+      token,
       email: passkey.user.email,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Passkey authentication error:", error);
     return NextResponse.json({ error: "Authentication failed" }, { status: 500 });
   }
 }

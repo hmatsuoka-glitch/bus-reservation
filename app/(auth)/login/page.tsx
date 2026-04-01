@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { startAuthentication } from "@simplewebauthn/browser";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -19,7 +20,6 @@ export default function LoginPage() {
   }, [session, router]);
 
   useEffect(() => {
-    // Check if WebAuthn is available
     if (
       typeof window !== "undefined" &&
       window.PublicKeyCredential &&
@@ -54,74 +54,62 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      // Get challenge from server
-      const challengeRes = await fetch("/api/passkey/authenticate", {
-        method: "GET",
-      });
-      const { challenge, allowCredentials } = await challengeRes.json();
+      // Get authentication options from server
+      const optionsRes = await fetch("/api/passkey/authenticate");
+      const options = await optionsRes.json();
 
-      if (!allowCredentials || allowCredentials.length === 0) {
-        setError("生体認証が設定されていません。メールアドレスとパスワードでログインしてください。");
+      if (!options.challengeId) {
+        setError("生体認証の準備に失敗しました");
         setLoading(false);
         return;
       }
 
-      // Use WebAuthn
-      const credential = await navigator.credentials.get({
-        publicKey: {
-          challenge: Uint8Array.from(atob(challenge), (c) => c.charCodeAt(0)),
-          allowCredentials: allowCredentials.map(
-            (c: { id: string; type: string }) => ({
-              id: Uint8Array.from(atob(c.id), (ch) => ch.charCodeAt(0)),
-              type: c.type,
-            })
-          ),
-          userVerification: "required",
-          timeout: 60000,
-        },
-      }) as PublicKeyCredential | null;
+      const { challengeId, ...authOptions } = options;
 
-      if (!credential) throw new Error("認証がキャンセルされました");
+      // Use SimpleWebAuthn browser library (handles all encoding correctly)
+      let authResponse;
+      try {
+        authResponse = await startAuthentication(authOptions);
+      } catch (err) {
+        if (err instanceof Error && err.name === "NotAllowedError") {
+          setError("生体認証がキャンセルされました");
+        } else {
+          setError("生体認証が設定されていません。パスワードでログインしてください。");
+        }
+        setLoading(false);
+        return;
+      }
 
-      const assertionResponse =
-        credential.response as AuthenticatorAssertionResponse;
-
+      // Verify with server
       const verifyRes = await fetch("/api/passkey/authenticate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: credential.id,
-          rawId: btoa(
-            String.fromCharCode(...new Uint8Array(credential.rawId))
-          ),
-          response: {
-            authenticatorData: btoa(
-              String.fromCharCode(
-                ...new Uint8Array(assertionResponse.authenticatorData)
-              )
-            ),
-            clientDataJSON: btoa(
-              String.fromCharCode(
-                ...new Uint8Array(assertionResponse.clientDataJSON)
-              )
-            ),
-            signature: btoa(
-              String.fromCharCode(
-                ...new Uint8Array(assertionResponse.signature)
-              )
-            ),
-          },
-        }),
+        body: JSON.stringify({ ...authResponse, challengeId }),
       });
 
-      const { userId, email: userEmail } = await verifyRes.json();
+      if (!verifyRes.ok) {
+        setError("生体認証に失敗しました。パスワードでログインしてください。");
+        setLoading(false);
+        return;
+      }
 
-      if (userId && userEmail) {
-        await signIn("credentials", {
-          email: userEmail,
-          password: `__passkey__${userId}`,
-          redirect: false,
-        });
+      const { token, email: userEmail } = await verifyRes.json();
+
+      if (!token || !userEmail) {
+        setError("認証エラーが発生しました");
+        setLoading(false);
+        return;
+      }
+
+      const result = await signIn("credentials", {
+        email: userEmail,
+        password: `__passkey_token__${token}`,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("ログインに失敗しました");
+      } else {
         router.push("/dashboard");
       }
     } catch (err) {

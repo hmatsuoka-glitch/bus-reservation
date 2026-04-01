@@ -20,6 +20,33 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        // Passkey token login
+        if (credentials.password.startsWith("__passkey_token__")) {
+          const token = credentials.password.replace("__passkey_token__", "");
+          const user = await prisma.user.findFirst({
+            where: {
+              email: credentials.email,
+              passkeyToken: token,
+              passkeyTokenExp: { gt: new Date() },
+            },
+          });
+          if (!user) return null;
+
+          // Consume token
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { passkeyToken: null, passkeyTokenExp: null },
+          });
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.nickname || user.email,
+            nickname: user.nickname,
+          };
+        }
+
+        // Normal password login
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
