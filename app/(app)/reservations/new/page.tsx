@@ -92,7 +92,10 @@ export default function NewReservationPage() {
     setParseError("");
     try {
       const formData = new global.FormData();
-      files.forEach((entry) => formData.append("files", entry.file));
+      files.forEach((entry, i) => {
+        const ext = entry.file.name.split(".").pop() || "bin";
+        formData.append("files", entry.file, `file_${i}.${ext}`);
+      });
 
       const res = await fetch("/api/parse-image", { method: "POST", body: formData });
       const parsed = await res.json();
