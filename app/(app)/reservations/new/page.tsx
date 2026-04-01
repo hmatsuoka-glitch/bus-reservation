@@ -91,24 +91,37 @@ export default function NewReservationPage() {
     setParsing(true);
     setParseError("");
     try {
-      const formData = new FormData();
-      const mimeToExt: Record<string, string> = {
-        "image/jpeg": "jpg", "image/png": "png",
-        "image/gif": "gif", "image/webp": "webp", "application/pdf": "pdf",
-      };
-      await Promise.all(
-        files.map(async (entry, i) => {
-          const ext = mimeToExt[entry.file.type] || "bin";
+      const SUPPORTED = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"];
+      for (const entry of files) {
+        if (!SUPPORTED.includes(entry.file.type)) {
+          throw new Error(`${entry.file.name}: 対応していないファイル形式です`);
+        }
+      }
+
+      const results = await Promise.all(
+        files.map(async (entry) => {
           const bytes = await entry.file.arrayBuffer();
-          const blob = new Blob([bytes], { type: entry.file.type });
-          formData.append("files", blob, `file_${i}.${ext}`);
+          const mimeType = entry.file.type;
+          const res = await fetch(`/api/parse-image?type=${encodeURIComponent(mimeType)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: bytes,
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "読み取りに失敗しました");
+          return data;
         })
       );
 
-      const res = await fetch("/api/parse-image", { method: "POST", body: formData });
-      const parsed = await res.json();
-
-      if (!res.ok) throw new Error(parsed.error || "読み取りに失敗しました");
+      // Merge: first non-null value wins
+      const parsed: Record<string, string | null> = {};
+      for (const result of results) {
+        for (const key of Object.keys(result)) {
+          if (result[key] != null && parsed[key] == null) {
+            parsed[key] = result[key];
+          }
+        }
+      }
 
       setForm((prev) => {
         const next = { ...prev };

@@ -39,11 +39,7 @@ interface ParsedReservation {
   seatNumber?: string | null;
 }
 
-async function parseFile(file: File): Promise<ParsedReservation> {
-  const bytes = await file.arrayBuffer();
-  const base64 = Buffer.from(bytes).toString("base64");
-  const mimeType = file.type;
-
+async function parseData(base64: string, mimeType: string): Promise<ParsedReservation> {
   if (!SUPPORTED_TYPES.includes(mimeType)) {
     throw new Error(`対応していないファイル形式: ${mimeType}`);
   }
@@ -91,53 +87,26 @@ async function parseFile(file: File): Promise<ParsedReservation> {
   return JSON.parse(jsonMatch[0]) as ParsedReservation;
 }
 
-// Merge multiple results — non-null values from later files override earlier ones
-function mergeResults(results: ParsedReservation[]): ParsedReservation {
-  const merged: ParsedReservation = {};
-  for (const result of results) {
-    for (const key of Object.keys(result) as (keyof ParsedReservation)[]) {
-      if (result[key] != null) {
-        (merged as Record<string, unknown>)[key] = result[key];
-      }
-    }
-  }
-  return merged;
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const files = formData.getAll("files") as File[];
+    const mimeType = req.nextUrl.searchParams.get("type") || "";
 
-    // Also support legacy single-file "file" key
-    const singleFile = formData.get("file") as File | null;
-    const allFiles = files.length > 0 ? files : singleFile ? [singleFile] : [];
+    if (!SUPPORTED_TYPES.includes(mimeType)) {
+      return NextResponse.json(
+        { error: `対応していないファイル形式です。JPG・PNG・GIF・WebP・PDFを使用してください。` },
+        { status: 400 }
+      );
+    }
 
-    if (allFiles.length === 0) {
+    const bytes = await req.arrayBuffer();
+    if (bytes.byteLength === 0) {
       return NextResponse.json({ error: "ファイルがありません" }, { status: 400 });
     }
 
-    if (allFiles.length > 5) {
-      return NextResponse.json({ error: "一度に処理できるファイルは5枚までです" }, { status: 400 });
-    }
+    const base64 = Buffer.from(bytes).toString("base64");
+    const result = await parseData(base64, mimeType);
 
-    // Check all file types upfront
-    for (const file of allFiles) {
-      if (!SUPPORTED_TYPES.includes(file.type)) {
-        return NextResponse.json(
-          { error: `${file.name}: 対応していないファイル形式です。JPG・PNG・GIF・WebP・PDFを使用してください。` },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Parse all files in parallel
-    const results = await Promise.all(allFiles.map(parseFile));
-
-    // Merge all results
-    const merged = mergeResults(results);
-
-    return NextResponse.json(merged);
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Image parse error:", error);
     const message = error instanceof Error ? error.message : "ファイルの解析中にエラーが発生しました";
