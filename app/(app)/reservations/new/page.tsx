@@ -91,35 +91,51 @@ export default function NewReservationPage() {
     setParsing(true);
     setParseError("");
     try {
+      // STEP1: ファイル検証
       const SUPPORTED = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"];
       for (const entry of files) {
         if (!SUPPORTED.includes(entry.file.type)) {
-          throw new Error(`${entry.file.name}: 対応していないファイル形式です`);
+          throw new Error(`[S1] ${entry.file.name}: 対応していないファイル形式です (type=${entry.file.type})`);
         }
-        if (entry.file.size > 3 * 1024 * 1024) {
-          throw new Error(`ファイルサイズは3MB以下にしてください`);
+        if (entry.file.size > 4 * 1024 * 1024) {
+          throw new Error(`[S1] ファイルサイズは4MB以下にしてください (${(entry.file.size/1024/1024).toFixed(1)}MB)`);
         }
       }
 
-      const filesData = await Promise.all(
-        files.map((entry) => new Promise<{ data: string; mimeType: string }>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = reader.result as string;
-            resolve({ data: dataUrl.split(",")[1], mimeType: entry.file.type });
-          };
-          reader.onerror = () => reject(new Error("ファイルの読み込みに失敗しました"));
-          reader.readAsDataURL(entry.file);
-        }))
-      );
+      // STEP2: FileReaderでbase64変換
+      let filesData: { data: string; mimeType: string }[];
+      try {
+        filesData = await Promise.all(
+          files.map((entry) => new Promise<{ data: string; mimeType: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const dataUrl = reader.result as string;
+              const parts = dataUrl.split(",");
+              resolve({ data: parts[1] ?? "", mimeType: entry.file.type });
+            };
+            reader.onerror = (e) => reject(new Error(`[S2] FileReader失敗: ${e}`));
+            reader.readAsDataURL(entry.file);
+          }))
+        );
+      } catch (e) {
+        throw new Error(`[S2] ${e instanceof Error ? e.message : String(e)}`);
+      }
 
-      const res = await fetch("/api/parse-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: filesData }),
-      });
+      // STEP3: API呼び出し
+      let res: Response;
+      try {
+        res = await fetch("/api/parse-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: filesData }),
+        });
+      } catch (e) {
+        throw new Error(`[S3-fetch] ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      // STEP4: レスポンス解析
       const parsed = await res.json();
-      if (!res.ok) throw new Error(parsed.error || "読み取りに失敗しました");
+      if (!res.ok) throw new Error(`[S4] ${parsed.error || "読み取りに失敗しました"}`);
 
       setForm((prev) => {
         const next = { ...prev };
@@ -324,7 +340,7 @@ export default function NewReservationPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                {files.length > 1 ? `${files.length}枚をAIで読み取る` : "AIで情報を読み取る"}
+                {files.length > 1 ? `${files.length}枚をAIで読み取る [v6]` : "AIで情報を読み取る [v6]"}
               </>
             )}
           </button>
