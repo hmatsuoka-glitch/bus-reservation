@@ -91,11 +91,19 @@ export default function NewReservationPage() {
     setParsing(true);
     setParseError("");
     try {
-      const formData = new global.FormData();
-      files.forEach((entry, i) => {
-        const ext = entry.file.name.split(".").pop() || "bin";
-        formData.append("files", entry.file, `file_${i}.${ext}`);
-      });
+      const formData = new FormData();
+      const mimeToExt: Record<string, string> = {
+        "image/jpeg": "jpg", "image/png": "png",
+        "image/gif": "gif", "image/webp": "webp", "application/pdf": "pdf",
+      };
+      await Promise.all(
+        files.map(async (entry, i) => {
+          const ext = mimeToExt[entry.file.type] || "bin";
+          const bytes = await entry.file.arrayBuffer();
+          const blob = new Blob([bytes], { type: entry.file.type });
+          formData.append("files", blob, `file_${i}.${ext}`);
+        })
+      );
 
       const res = await fetch("/api/parse-image", { method: "POST", body: formData });
       const parsed = await res.json();
