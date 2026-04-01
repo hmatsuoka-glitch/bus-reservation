@@ -6,7 +6,12 @@ const nextConfig: NextConfig = {
       allowedOrigins: ["localhost:3000", "*.vercel.app"],
     },
   },
-  serverExternalPackages: ["@libsql/client"],
+  serverExternalPackages: [
+    "@libsql/client",
+    "@prisma/adapter-libsql",
+    "@prisma/client",
+    "bcryptjs",
+  ],
 };
 
 export default nextConfig;
