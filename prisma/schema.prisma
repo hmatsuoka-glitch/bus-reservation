@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  password     String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  reservations Reservation[]
+  passkeys     Passkey[]
+}
+
+model Passkey {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String   @unique
+  publicKey    String
+  counter      Int      @default(0)
+  deviceType   String   @default("unknown")
+  backedUp     Boolean  @default(false)
+  transports   String?
+  createdAt    DateTime @default(now())
+}
+
+model Reservation {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingNumber   String
+  passengerName   String
+  busCompany      String
+  departureDate   String
+  departureTime   String
+  arrivalTime     String?
+  departureStop   String
+  arrivalStop     String
+  departureLat    Float?
+  departureLng    Float?
+  seatNumber      String?
+  qrCodeData      String?
+  boardingPassUrl String?
+  status          String   @default("upcoming")
+  notes           String?
+  rawEmailContent String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
