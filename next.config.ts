@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     "@prisma/adapter-libsql",
     "@prisma/client",
     "bcryptjs",
+    "@anthropic-ai/sdk",
   ],
 };
 

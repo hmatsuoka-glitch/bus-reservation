@@ -7,7 +7,7 @@ import Link from "next/link";
 import { startRegistration } from "@simplewebauthn/browser";
 
 export default function SetupPasskeyPage() {
-  const { data: session } = useSession();
+  const { status } = useSession();
   const [supported, setSupported] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -15,7 +15,10 @@ export default function SetupPasskeyPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!session) router.push("/login");
+    if (status === "unauthenticated") router.push("/login");
+  }, [status, router]);
+
+  useEffect(() => {
     if (
       typeof window !== "undefined" &&
       window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable
@@ -24,7 +27,7 @@ export default function SetupPasskeyPage() {
         setSupported
       );
     }
-  }, [session, router]);
+  }, []);
 
   const setupPasskey = async () => {
     setLoading(true);

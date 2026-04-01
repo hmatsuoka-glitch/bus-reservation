@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
-type Tab = "email" | "manual";
+type Tab = "file" | "manual";
 
 interface FormData {
   busCompany: string;
@@ -42,23 +43,54 @@ const INITIAL_FORM: FormData = {
 };
 
 export default function NewReservationPage() {
-  const [tab, setTab] = useState<Tab>("email");
-  const [emailText, setEmailText] = useState("");
+  const [tab, setTab] = useState<Tab>("file");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState("");
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<"input" | "confirm">("input");
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const handleParseEmail = async () => {
-    if (!emailText.trim()) return;
+  const handleFile = (selected: File) => {
+    setFile(selected);
+    setParseError("");
+    if (selected.type.startsWith("image/")) {
+      const url = URL.createObjectURL(selected);
+      setPreview(url);
+    } else {
+      setPreview(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) handleFile(dropped);
+  };
+
+  const handleParseFile = async () => {
+    if (!file) return;
     setParsing(true);
+    setParseError("");
     try {
-      const res = await fetch("/api/parse-email", {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/parse-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailText }),
+        body: formData,
       });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "読み取りに失敗しました");
+      }
+
       const parsed = await res.json();
       setForm((prev) => ({
         ...prev,
@@ -71,13 +103,13 @@ export default function NewReservationPage() {
         departureStop: parsed.departureStop || prev.departureStop,
         arrivalStop: parsed.arrivalStop || prev.arrivalStop,
         seatNumber: parsed.seatNumber || prev.seatNumber,
-        rawEmailContent: emailText,
       }));
       setStep("confirm");
-    } catch {
-      alert("メールの解析に失敗しました");
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : "読み取りに失敗しました");
+    } finally {
+      setParsing(false);
     }
-    setParsing(false);
   };
 
   const handleSave = async () => {
@@ -95,11 +127,14 @@ export default function NewReservationPage() {
       if (res.ok) {
         const data = await res.json();
         router.push(`/reservations/${data.id}`);
+      } else {
+        alert("保存に失敗しました");
       }
     } catch {
       alert("保存に失敗しました");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const updateForm = (field: keyof FormData, value: string) => {
@@ -129,12 +164,12 @@ export default function NewReservationPage() {
       {step === "input" && (
         <div className="bg-gray-100 rounded-xl p-1 flex gap-1">
           <button
-            onClick={() => setTab("email")}
+            onClick={() => setTab("file")}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === "email" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"
+              tab === "file" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"
             }`}
           >
-            メールから取込
+            📷 写真・PDFから取込
           </button>
           <button
             onClick={() => setTab("manual")}
@@ -142,31 +177,106 @@ export default function NewReservationPage() {
               tab === "manual" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"
             }`}
           >
-            手動入力
+            ✏️ 手動入力
           </button>
         </div>
       )}
 
-      {/* Email parse tab */}
-      {step === "input" && tab === "email" && (
+      {/* File upload tab */}
+      {step === "input" && tab === "file" && (
         <div className="bg-white rounded-2xl p-4 space-y-4 border border-gray-100">
-          <div>
-            <p className="text-sm text-gray-500 mb-3">
-              予約確認メールの本文をコピー＆ペーストしてください。自動的に情報を読み取ります。
-            </p>
-            <textarea
-              value={emailText}
-              onChange={(e) => setEmailText(e.target.value)}
-              className="w-full h-48 px-4 py-3 border border-gray-200 rounded-xl text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="ここにメール本文を貼り付けてください&#10;&#10;例：&#10;予約確認メール&#10;予約番号：ABC123&#10;出発日：2024年3月15日&#10;出発地：新宿西口バスターミナル..."
-            />
-          </div>
-          <button
-            onClick={handleParseEmail}
-            disabled={!emailText.trim() || parsing}
-            className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold disabled:opacity-50 hover:bg-blue-700 transition-colors"
+          <p className="text-sm text-gray-500">
+            予約確認書の写真・スクリーンショット・PDFをアップロードすると、AIが自動で情報を読み取ります。
+          </p>
+
+          {/* Drop zone */}
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-colors ${
+              dragOver
+                ? "border-blue-400 bg-blue-50"
+                : file
+                ? "border-green-400 bg-green-50"
+                : "border-gray-300 hover:border-blue-300 hover:bg-gray-50"
+            }`}
           >
-            {parsing ? "読み取り中..." : "メールを読み取る"}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            />
+
+            {file ? (
+              <div className="space-y-2">
+                {preview ? (
+                  <div className="relative w-full max-h-48 overflow-hidden rounded-xl">
+                    <Image
+                      src={preview}
+                      alt="preview"
+                      width={400}
+                      height={192}
+                      className="w-full object-contain max-h-48"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto">
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                )}
+                <p className="text-sm font-medium text-gray-700">{file.name}</p>
+                <p className="text-xs text-gray-400">タップして変更</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex justify-center gap-3">
+                  <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">タップして選択</p>
+                  <p className="text-xs text-gray-400 mt-1">JPG・PNG・WebP・PDF対応</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {parseError && (
+            <div className="bg-red-50 rounded-xl p-3">
+              <p className="text-sm text-red-600">{parseError}</p>
+            </div>
+          )}
+
+          <button
+            onClick={handleParseFile}
+            disabled={!file || parsing}
+            className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold disabled:opacity-50 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+          >
+            {parsing ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                AIが読み取り中...
+              </>
+            ) : (
+              "AIで情報を読み取る"
+            )}
           </button>
         </div>
       )}
@@ -179,7 +289,7 @@ export default function NewReservationPage() {
               <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <p className="text-sm text-green-700 font-medium">メールから情報を読み取りました。確認・修正してください。</p>
+              <p className="text-sm text-green-700 font-medium">AIが情報を読み取りました。確認・修正してください。</p>
             </div>
           )}
 
