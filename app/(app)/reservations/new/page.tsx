@@ -96,32 +96,30 @@ export default function NewReservationPage() {
         if (!SUPPORTED.includes(entry.file.type)) {
           throw new Error(`${entry.file.name}: 対応していないファイル形式です`);
         }
-      }
-
-      const results = await Promise.all(
-        files.map(async (entry) => {
-          const bytes = await entry.file.arrayBuffer();
-          const mimeType = entry.file.type;
-          const res = await fetch(`/api/parse-image?type=${encodeURIComponent(mimeType)}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/octet-stream" },
-            body: bytes,
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "読み取りに失敗しました");
-          return data;
-        })
-      );
-
-      // Merge: first non-null value wins
-      const parsed: Record<string, string | null> = {};
-      for (const result of results) {
-        for (const key of Object.keys(result)) {
-          if (result[key] != null && parsed[key] == null) {
-            parsed[key] = result[key];
-          }
+        if (entry.file.size > 3 * 1024 * 1024) {
+          throw new Error(`ファイルサイズは3MB以下にしてください`);
         }
       }
+
+      const filesData = await Promise.all(
+        files.map((entry) => new Promise<{ data: string; mimeType: string }>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            resolve({ data: dataUrl.split(",")[1], mimeType: entry.file.type });
+          };
+          reader.onerror = () => reject(new Error("ファイルの読み込みに失敗しました"));
+          reader.readAsDataURL(entry.file);
+        }))
+      );
+
+      const res = await fetch("/api/parse-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: filesData }),
+      });
+      const parsed = await res.json();
+      if (!res.ok) throw new Error(parsed.error || "読み取りに失敗しました");
 
       setForm((prev) => {
         const next = { ...prev };

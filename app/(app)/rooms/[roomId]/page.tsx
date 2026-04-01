@@ -168,31 +168,36 @@ export default function RoomDetailPage({ params }: { params: Promise<{ roomId: s
               const r = sr.reservation;
               const date = new Date(r.departureDate + "T00:00:00");
               return (
-                <div key={sr.id} className="bg-white rounded-2xl p-4 border border-gray-100 space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-800">{r.busCompany}</p>
-                      <p className="text-sm text-gray-500">
-                        {format(date, "M月d日(E)", { locale: ja })} {r.departureTime}
-                        {r.arrivalTime && ` → ${r.arrivalTime}`}
-                      </p>
+                <div key={sr.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                  <Link href={`/reservations/${r.id}`} className="block p-4 space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-semibold text-gray-800">{r.busCompany}</p>
+                        <p className="text-sm text-gray-500">
+                          {format(date, "M月d日(E)", { locale: ja })} {r.departureTime}
+                          {r.arrivalTime && ` → ${r.arrivalTime}`}
+                        </p>
+                      </div>
+                      <svg className="w-4 h-4 text-gray-300 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
-                    {(room.isOwner || sr.sharedBy === room.ownerId) && (
-                      <button onClick={() => handleRemoveReservation(r.id)} className="text-gray-300 hover:text-red-400">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg text-xs">{r.departureStop}</span>
+                      <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="bg-green-50 text-green-600 px-2 py-0.5 rounded-lg text-xs">{r.arrivalStop}</span>
+                      {r.seatNumber && <span className="text-xs text-gray-400">座席 {r.seatNumber}</span>}
+                    </div>
+                  </Link>
+                  {(room.isOwner || sr.sharedBy === room.ownerId) && (
+                    <div className="px-4 pb-3 flex justify-end">
+                      <button onClick={() => handleRemoveReservation(r.id)} className="text-xs text-gray-400 hover:text-red-500">
+                        共有を解除
                       </button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg text-xs">{r.departureStop}</span>
-                    <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    <span className="bg-green-50 text-green-600 px-2 py-0.5 rounded-lg text-xs">{r.arrivalStop}</span>
-                    {r.seatNumber && <span className="text-xs text-gray-400">座席 {r.seatNumber}</span>}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })

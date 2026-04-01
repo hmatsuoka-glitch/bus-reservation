@@ -39,34 +39,20 @@ interface ParsedReservation {
   seatNumber?: string | null;
 }
 
-async function parseData(base64: string, mimeType: string): Promise<ParsedReservation> {
+async function parseOne(base64: string, mimeType: string): Promise<ParsedReservation> {
   if (!SUPPORTED_TYPES.includes(mimeType)) {
     throw new Error(`対応していないファイル形式: ${mimeType}`);
   }
 
-  let messageContent: Anthropic.MessageParam["content"];
-
-  if (mimeType === "application/pdf") {
-    messageContent = [
-      {
-        type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: base64 },
-      } as Anthropic.DocumentBlockParam,
-      { type: "text", text: PARSE_PROMPT },
-    ];
-  } else {
-    messageContent = [
-      {
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: mimeType as SupportedImageType,
-          data: base64,
-        },
-      },
-      { type: "text", text: PARSE_PROMPT },
-    ];
-  }
+  const messageContent: Anthropic.MessageParam["content"] = mimeType === "application/pdf"
+    ? [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } } as Anthropic.DocumentBlockParam,
+        { type: "text", text: PARSE_PROMPT },
+      ]
+    : [
+        { type: "image", source: { type: "base64", media_type: mimeType as SupportedImageType, data: base64 } },
+        { type: "text", text: PARSE_PROMPT },
+      ];
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
@@ -75,38 +61,51 @@ async function parseData(base64: string, mimeType: string): Promise<ParsedReserv
   });
 
   const textContent = response.content.find((c) => c.type === "text");
-  if (!textContent || textContent.type !== "text") {
-    throw new Error("AIからのレスポンスが空でした");
-  }
+  if (!textContent || textContent.type !== "text") throw new Error("AIからのレスポンスが空でした");
 
   const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("予約情報を抽出できませんでした");
-  }
+  if (!jsonMatch) throw new Error("予約情報を抽出できませんでした");
 
   return JSON.parse(jsonMatch[0]) as ParsedReservation;
 }
 
+function mergeResults(results: ParsedReservation[]): ParsedReservation {
+  const merged: ParsedReservation = {};
+  for (const result of results) {
+    for (const key of Object.keys(result) as (keyof ParsedReservation)[]) {
+      if (result[key] != null && merged[key] == null) {
+        (merged as Record<string, unknown>)[key] = result[key];
+      }
+    }
+  }
+  return merged;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const mimeType = req.nextUrl.searchParams.get("type") || "";
+    const body = await req.json();
+    const files: { data: string; mimeType: string }[] = body.files || [];
 
-    if (!SUPPORTED_TYPES.includes(mimeType)) {
-      return NextResponse.json(
-        { error: `対応していないファイル形式です。JPG・PNG・GIF・WebP・PDFを使用してください。` },
-        { status: 400 }
-      );
-    }
-
-    const bytes = await req.arrayBuffer();
-    if (bytes.byteLength === 0) {
+    if (files.length === 0) {
       return NextResponse.json({ error: "ファイルがありません" }, { status: 400 });
     }
+    if (files.length > 5) {
+      return NextResponse.json({ error: "一度に処理できるファイルは5枚までです" }, { status: 400 });
+    }
 
-    const base64 = Buffer.from(bytes).toString("base64");
-    const result = await parseData(base64, mimeType);
+    for (const { mimeType } of files) {
+      if (!SUPPORTED_TYPES.includes(mimeType)) {
+        return NextResponse.json(
+          { error: `対応していないファイル形式です。JPG・PNG・GIF・WebP・PDFを使用してください。` },
+          { status: 400 }
+        );
+      }
+    }
 
-    return NextResponse.json(result);
+    const results = await Promise.all(files.map(({ data, mimeType }) => parseOne(data, mimeType)));
+    const merged = mergeResults(results);
+
+    return NextResponse.json(merged);
   } catch (error) {
     console.error("Image parse error:", error);
     const message = error instanceof Error ? error.message : "ファイルの解析中にエラーが発生しました";
