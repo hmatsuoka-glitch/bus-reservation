@@ -5,29 +5,44 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function RegisterPage() {
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      setError("パスワードが一致しません");
+      return;
+    }
     setLoading(true);
     setError("");
 
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
-    });
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (res.ok) {
-      router.push("/login?registered=1");
-    } else {
-      const data = await res.json();
-      setError(data.error || "登録に失敗しました");
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("サーバーエラーが発生しました");
+      }
+
+      if (res.ok) {
+        router.push("/login?registered=1");
+      } else {
+        setError(data?.error || "登録に失敗しました");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "登録に失敗しました。もう一度お試しください。");
+    } finally {
       setLoading(false);
     }
   };
@@ -46,7 +61,8 @@ export default function RegisterPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-5">新規登録</h2>
+          <h2 className="text-lg font-bold text-gray-800 mb-2">新規登録</h2>
+          <p className="text-sm text-gray-500 mb-5">ログイン情報を入力してください</p>
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
@@ -55,17 +71,6 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleRegister} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">お名前</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="山田 太郎"
-                required
-              />
-            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
               <input
@@ -85,6 +90,18 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="8文字以上"
+                minLength={8}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">パスワード（確認）</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="もう一度入力"
                 minLength={8}
                 required
               />

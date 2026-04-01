@@ -8,11 +8,13 @@ interface NavBarProps {
   user?: {
     name?: string | null;
     email?: string | null;
+    nickname?: string | null;
   };
 }
 
 export function NavBar({ user }: NavBarProps) {
   const pathname = usePathname();
+  const displayName = user?.nickname || user?.name || user?.email || "ユーザー";
 
   return (
     <>
@@ -28,10 +30,17 @@ export function NavBar({ user }: NavBarProps) {
             <span className="font-bold text-gray-800">BusPass</span>
           </Link>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500 hidden sm:block">{user?.name}</span>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 font-bold text-xs">
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <span className="text-sm font-medium text-gray-700 hidden sm:block">{displayName}</span>
+            </div>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2 py-1"
             >
               ログアウト
             </button>
@@ -65,9 +74,9 @@ export function NavBar({ user }: NavBarProps) {
             <span className="text-xs font-medium text-gray-400 mt-1">追加</span>
           </Link>
           <Link
-            href="/dashboard?tab=settings"
+            href="/mypage"
             className={`flex flex-col items-center gap-1 px-4 py-1 rounded-lg transition-colors ${
-              pathname?.includes("settings") ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
+              pathname === "/mypage" ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
             }`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
