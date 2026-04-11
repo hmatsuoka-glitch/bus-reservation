@@ -34,7 +34,7 @@
 | nao | 09-システム開発部 | 要件定義・システム設計・アーキテクチャ設計 |
 | riku | 09-システム開発部 | フロントエンド実装（Next.js・React・Tailwind CSS） |
 | ao | 09-システム開発部 | バックエンド実装（API・DB・認証） |
-| haru | 09-システム開発部 | インフラ・デプロイ（Vercel・GitHub Actions・CI/CD） |
+| kuu | 09-システム開発部 | インフラ・デプロイ（Vercel・GitHub Actions・CI/CD） |
 | mio | 09-システム開発部 | テスト・品質確認・バグ検出・コードレビュー |
 
 ---
