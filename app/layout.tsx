@@ -1,19 +1,27 @@
-import type { Metadata } from "next";
-import { Noto_Sans_JP } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
-const noto = Noto_Sans_JP({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-});
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#2563EB",
+};
 
 export const metadata: Metadata = {
   title: "BusPass - 高速バス予約管理",
   description: "高速バスの予約・搭乗券・QRコード・乗り場を一元管理",
   manifest: "/manifest.json",
-  themeColor: "#2563EB",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "BusPass",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export default function RootLayout({
@@ -22,9 +30,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ja" className={noto.className}>
+    <html lang="ja" className="font-sans">
+      <head>
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.svg" />
+      </head>
       <body className="bg-gray-50 min-h-screen">
         <Providers>{children}</Providers>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
