@@ -1,4 +1,4 @@
-const CACHE_NAME = 'buspass-v1';
+const CACHE_NAME = 'buspass-v2';
 
 // Core assets to cache for offline use
 const PRECACHE_ASSETS = [
