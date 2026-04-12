@@ -77,24 +77,28 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4 pt-2">
       {/* Today's alert */}
-      {todayRes.length > 0 && (
-        <div className="bg-green-500 text-white rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="font-bold">今日の乗車</span>
-          </div>
-          {todayRes.map((r) => (
+      <div className="bg-green-500 text-white rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="font-bold">今日の乗車</span>
+        </div>
+        {todayRes.length > 0 ? (
+          todayRes.map((r) => (
             <Link key={r.id} href={`/reservations/${r.id}`}>
               <div className="bg-white/20 rounded-xl p-3 hover:bg-white/30 transition-colors">
                 <div className="font-semibold">{r.departureStop} → {r.arrivalStop}</div>
                 <div className="text-sm opacity-90">{r.departureTime} 出発 {r.seatNumber && `・座席 ${r.seatNumber}`}</div>
               </div>
             </Link>
-          ))}
-        </div>
-      )}
+          ))
+        ) : (
+          <div className="bg-white/20 rounded-xl p-3">
+            <div className="text-sm opacity-90">今日の予定はありません</div>
+          </div>
+        )}
+      </div>
 
       {/* Filter tabs */}
       <div className="flex gap-2">
