@@ -61,11 +61,11 @@ export function NavBar({ user }: NavBarProps) {
 
       {/* Bottom navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50">
-        <div className="max-w-2xl mx-auto px-2 h-16 flex items-center justify-around">
+        <div className="max-w-2xl mx-auto h-16 flex items-center">
           {/* Home */}
           <Link
             href="/dashboard"
-            className={`flex flex-col items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
+            className={`flex-1 flex flex-col items-center gap-1 py-1 transition-colors ${
               pathname === "/dashboard" ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
             }`}
           >
@@ -78,7 +78,7 @@ export function NavBar({ user }: NavBarProps) {
           {/* Today */}
           <Link
             href="/today"
-            className={`flex flex-col items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
+            className={`flex-1 flex flex-col items-center gap-1 py-1 transition-colors ${
               pathname === "/today" ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
             }`}
           >
@@ -89,7 +89,7 @@ export function NavBar({ user }: NavBarProps) {
           </Link>
 
           {/* Add reservation */}
-          <Link href="/reservations/new" className="flex flex-col items-center gap-1">
+          <Link href="/reservations/new" className="flex-1 flex flex-col items-center gap-1">
             <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center shadow-lg -mt-4">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -101,7 +101,7 @@ export function NavBar({ user }: NavBarProps) {
           {/* Rooms */}
           <Link
             href="/rooms"
-            className={`relative flex flex-col items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
+            className={`flex-1 relative flex flex-col items-center gap-1 py-1 transition-colors ${
               pathname.startsWith("/rooms") ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
             }`}
           >
@@ -121,7 +121,7 @@ export function NavBar({ user }: NavBarProps) {
           {/* My page */}
           <Link
             href="/mypage"
-            className={`flex flex-col items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
+            className={`flex-1 flex flex-col items-center gap-1 py-1 transition-colors ${
               pathname === "/mypage" ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
             }`}
           >
