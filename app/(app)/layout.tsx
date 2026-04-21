@@ -15,7 +15,9 @@ export default async function AppLayout({
   }
 
   // Check if nickname is set
+  // redirect() must be called OUTSIDE try/catch (Next.js throws NEXT_REDIRECT internally)
   let dbUser: { nickname: string | null } | null = null;
+  let dbFailed = false;
   try {
     dbUser = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -23,14 +25,15 @@ export default async function AppLayout({
     });
   } catch (e) {
     console.error("Database error in layout:", e);
-    redirect("/login");
+    dbFailed = true;
   }
 
-  if (!dbUser?.nickname) {
-    redirect("/setup-nickname");
-  }
+  if (dbFailed) redirect("/login");
 
-  const displayName = dbUser.nickname;
+  const nickname = dbUser?.nickname;
+  if (!nickname) redirect("/setup-nickname");
+
+  const displayName = nickname;
 
   return (
     <div className="min-h-screen bg-gray-50">
