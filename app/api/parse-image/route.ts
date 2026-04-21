@@ -125,6 +125,13 @@ function mergeResults(results: ParsedReservation[]): ParsedReservation {
 }
 
 export async function POST(req: NextRequest) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("ANTHROPIC_API_KEY is not set");
+    return jsonResponse(
+      { error: "サーバー設定エラー: ANTHROPIC_API_KEYが設定されていません" },
+      { status: 500 }
+    );
+  }
   try {
     const body = await req.json();
     const files: { data: string; mimeType: string }[] = body.files || [];
