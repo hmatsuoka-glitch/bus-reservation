@@ -15,22 +15,22 @@ export default async function AppLayout({
   }
 
   // Check if nickname is set
-  let displayName: string;
+  let dbUser: { nickname: string | null } | null = null;
   try {
-    const user = await prisma.user.findUnique({
+    dbUser = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { nickname: true },
     });
-
-    if (!user?.nickname) {
-      redirect("/setup-nickname");
-    }
-
-    displayName = user.nickname;
   } catch (e) {
     console.error("Database error in layout:", e);
     redirect("/login");
   }
+
+  if (!dbUser?.nickname) {
+    redirect("/setup-nickname");
+  }
+
+  const displayName = dbUser.nickname;
 
   return (
     <div className="min-h-screen bg-gray-50">
