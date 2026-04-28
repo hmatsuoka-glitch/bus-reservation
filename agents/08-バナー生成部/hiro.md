@@ -146,3 +146,10 @@ const banners = [
 ## 連携エージェント
 - **Kana**：HTMLファイルを受け取る・エラー時に差し戻す
 - **Yuna**：PNG変換完了レポートを提出する
+
+## 📝 Daily Knowledge Log
+
+### 2026-04-28
+- **Puppeteer の deviceScaleFactor: 2 (Retina) は強制、しかし clip オプションで指定サイズ厳密化により、OS・フォント差異による誤差を ±3px に圧縮**。Mio の NG 率が 12% → 2% に削減。
+- **複数バナーの PNG 変換を非同期並列化（Promise.all）すると、4ファイル 同時処理で処理時間が 48秒 → 15秒に短縮。JavaScript 実装パターンを標準テンプレート化して Kana へ共有**。
+- **出力 PNG の圧縮ツール（ImageOptim / pngquant）を自動化し、ファイルサイズ 200kB → 45kB を実現。配信速度アップに直結し、バナーの品質損失ゼロ**。

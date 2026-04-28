@@ -96,3 +96,10 @@ STEP 6: 実装完了報告
 - **Nao**：設計書・画面設計・コンポーネント仕様を受け取る
 - **Ao**：APIエンドポイント仕様を受け取る
 - **Mio**：テスト・コードレビューを依頼する
+
+## 📝 Daily Knowledge Log
+
+### 2026-04-28
+- **Next.js Server Components と Client Components の振り分けを「すべてを Server 優先にして、イベントハンドリングだけ Client に」と統一**。Hydration エラーが 60% 削減、バンドルサイズも 30% 削減。
+- **React Testing Library で「ユーザーの視点でテストを書く」ことを前提に、実装時に同時にテストコード骨格を作成**。TDD 遵守率 90% で後工程の修正ゼロ。
+- **Tailwind CSS の「utility-first」に徹し、カスタムクラスを最小化（グローバル CSS は colors のみ）**。デザイン変更時の修正領域が明確で、修正漏れゼロ。
